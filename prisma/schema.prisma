@@ -1,0 +1,97 @@
+// Prisma schema — SQLite (개발용). 배포 시 provider를 postgresql로 바꾸고
+// DATABASE_URL만 교체하면 애플리케이션 코드는 그대로 동작한다.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------- Auth.js (NextAuth) 표준 모델 ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  fundings Funding[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- 서비스 도메인 모델 ----------
+
+model Funding {
+  id         String   @id @default(cuid())
+  ownerId    String
+  title      String // 상품명 (OG에서 프리필, 수정 가능)
+  productUrl String // 원본 상품 링크
+  imageUrl   String? // OG 이미지
+  siteName   String? // 쇼핑몰 이름
+  goalAmount Int // 목표 금액 (KRW)
+  message    String? // 주최자의 한마디
+  deadline   DateTime // 마감일 (이후 참여 불가)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  contributions Contribution[]
+
+  @@index([ownerId])
+}
+
+model Contribution {
+  id        String   @id @default(cuid())
+  fundingId String
+  name      String // 참여자 이름 (비로그인)
+  amount    Int // 참여 금액 (KRW) — 주최자에게만 공개
+  message   String? // 축하 메시지 (공개)
+  createdAt DateTime @default(now())
+
+  funding Funding @relation(fields: [fundingId], references: [id], onDelete: Cascade)
+
+  @@index([fundingId])
+}

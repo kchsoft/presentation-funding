@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { deleteFundingAction } from "@/app/actions/funding";
 
 export default function DeleteButton({ fundingId }: { fundingId: string }) {
@@ -11,8 +12,9 @@ export default function DeleteButton({ fundingId }: { fundingId: string }) {
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="text-xs text-neutral-400 underline underline-offset-2 hover:text-red-600"
+        className="flex items-center gap-1 text-xs text-neutral-400 hover:text-red-600"
       >
+        <Trash2 size={12} />
         펀딩 삭제
       </button>
     );

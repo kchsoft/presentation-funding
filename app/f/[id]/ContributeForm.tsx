@@ -1,15 +1,26 @@
 "use client";
 
 import { useActionState } from "react";
+import { motion } from "motion/react";
+import { HeartHandshake } from "lucide-react";
 import { contributeAction, type ActionState } from "@/app/actions/funding";
+import { useOnActionSuccess } from "@/app/lib/hooks/useOnActionSuccess";
 
 const PRESET_AMOUNTS = [10000, 20000, 30000, 50000];
 
-export default function ContributeForm({ fundingId }: { fundingId: string }) {
+export default function ContributeForm({
+  fundingId,
+  onSuccess,
+}: {
+  fundingId: string;
+  onSuccess?: () => void;
+}) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     contributeAction,
     null,
   );
+
+  useOnActionSuccess(state, onSuccess);
 
   if (state?.success) {
     return (
@@ -34,7 +45,7 @@ export default function ContributeForm({ fundingId }: { fundingId: string }) {
           required
           maxLength={20}
           placeholder="친구가 알아볼 수 있는 이름"
-          className="w-full rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-rose-500 dark:border-white/20 dark:bg-neutral-900"
+          className="w-full rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-white/20 dark:bg-neutral-900"
         />
       </div>
 
@@ -50,13 +61,14 @@ export default function ContributeForm({ fundingId }: { fundingId: string }) {
           min={1000}
           step={1000}
           placeholder="40000"
-          className="w-full rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-rose-500 dark:border-white/20 dark:bg-neutral-900"
+          className="w-full rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-white/20 dark:bg-neutral-900"
         />
         <div className="flex flex-wrap gap-2">
           {PRESET_AMOUNTS.map((amount) => (
-            <button
+            <motion.button
               key={amount}
               type="button"
+              whileTap={{ scale: 0.95 }}
               onClick={() => {
                 const input = document.getElementById(
                   "amount",
@@ -66,7 +78,7 @@ export default function ContributeForm({ fundingId }: { fundingId: string }) {
               className="rounded-full border border-black/10 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               {new Intl.NumberFormat("ko-KR").format(amount)}원
-            </button>
+            </motion.button>
           ))}
         </div>
         <p className="text-xs text-neutral-400">
@@ -84,7 +96,7 @@ export default function ContributeForm({ fundingId }: { fundingId: string }) {
           rows={2}
           maxLength={200}
           placeholder="생일 축하해! 🎂"
-          className="w-full resize-none rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-rose-500 dark:border-white/20 dark:bg-neutral-900"
+          className="w-full resize-none rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-white/20 dark:bg-neutral-900"
         />
       </div>
 
@@ -95,9 +107,16 @@ export default function ContributeForm({ fundingId }: { fundingId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-xl bg-rose-500 py-3 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
       >
-        {pending ? "보내는 중…" : "마음 보태기 💝"}
+        {pending ? (
+          "보내는 중…"
+        ) : (
+          <>
+            <HeartHandshake size={16} />
+            마음 보태기
+          </>
+        )}
       </button>
     </form>
   );

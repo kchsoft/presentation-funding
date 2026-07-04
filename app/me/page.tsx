@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/app/lib/server/auth";
 import { listMyFundings, totalAmount } from "@/app/lib/server/fundings";
-import { daysLeft, formatKrw, progressPercent } from "@/app/lib/format";
+import { daysLeft, progressPercent } from "@/app/lib/format";
 import LoginButtons from "@/app/components/LoginButtons";
+import FundingList from "./FundingList";
 
 export const metadata: Metadata = {
   title: "내 펀딩",
@@ -34,7 +35,7 @@ export default async function MyPage() {
         <h1 className="text-2xl font-bold">내 펀딩</h1>
         <Link
           href="/create"
-          className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
         >
           + 새 펀딩
         </Link>
@@ -47,55 +48,21 @@ export default async function MyPage() {
           받고 싶은 선물이 있다면 지금 시작해보세요!
         </p>
       ) : (
-        <ul className="space-y-3">
-          {fundings.map((funding) => {
+        <FundingList
+          items={fundings.map((funding) => {
             const total = totalAmount(funding.contributions);
-            const percent = progressPercent(total, funding.goalAmount);
-            const dLeft = daysLeft(funding.deadline);
-            const closed = funding.deadline < new Date();
-
-            return (
-              <li key={funding.id}>
-                <Link
-                  href={`/f/${funding.id}`}
-                  className="flex items-center gap-4 rounded-2xl border border-black/10 bg-white p-4 shadow-sm transition hover:border-rose-300 dark:border-white/15 dark:bg-neutral-900"
-                >
-                  {funding.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={funding.imageUrl}
-                      alt=""
-                      className="h-16 w-16 shrink-0 rounded-lg bg-neutral-100 object-cover dark:bg-neutral-800"
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-2xl dark:bg-neutral-800">
-                      🎁
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {funding.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-neutral-400">
-                      {formatKrw(total)} 모임 · {funding.contributions.length}명
-                      참여 ·{" "}
-                      {closed ? "마감됨" : dLeft === 0 ? "오늘 마감" : `D-${dLeft}`}
-                    </p>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-                      <div
-                        className="h-full rounded-full bg-rose-500"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-sm font-bold text-rose-500">
-                    {percent}%
-                  </span>
-                </Link>
-              </li>
-            );
+            return {
+              id: funding.id,
+              title: funding.title,
+              imageUrl: funding.imageUrl,
+              total,
+              percent: progressPercent(total, funding.goalAmount),
+              contributionCount: funding.contributions.length,
+              dLeft: daysLeft(funding.deadline),
+              closed: funding.deadline < new Date(),
+            };
           })}
-        </ul>
+        />
       )}
     </main>
   );

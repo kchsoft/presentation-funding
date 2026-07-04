@@ -65,17 +65,18 @@ model VerificationToken {
 // ---------- 서비스 도메인 모델 ----------
 
 model Funding {
-  id         String   @id @default(cuid())
-  ownerId    String
-  title      String // 상품명 (OG에서 프리필, 수정 가능)
-  productUrl String // 원본 상품 링크
-  imageUrl   String? // OG 이미지
-  siteName   String? // 쇼핑몰 이름
-  goalAmount Int // 목표 금액 (KRW)
-  message    String? // 주최자의 한마디
-  deadline   DateTime // 마감일 (이후 참여 불가)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  ownerId         String
+  title           String // 상품명 (OG에서 프리필, 수정 가능)
+  productUrl      String // 원본 상품 링크
+  imageUrl        String? // OG 이미지
+  siteName        String? // 쇼핑몰 이름
+  goalAmount      Int // 목표 금액 (KRW)
+  message         String? // 주최자의 한마디
+  thankYouMessage String? // 주최자의 감사 메시지 — 언제든 작성/수정 가능, 전체 공개
+  deadline        DateTime // 마감일 (이후 참여 불가)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   contributions Contribution[]

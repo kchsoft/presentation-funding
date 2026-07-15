@@ -1,5 +1,5 @@
-// Prisma schema — SQLite (개발용). 배포 시 provider를 postgresql로 바꾸고
-// DATABASE_URL만 교체하면 애플리케이션 코드는 그대로 동작한다.
+// Prisma schema — Supabase PostgreSQL.
+// 런타임은 DATABASE_URL, Prisma CLI는 prisma.config.ts의 DIRECT_URL을 사용한다.
 
 generator client {
   provider = "prisma-client"
@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------- Auth.js (NextAuth) 표준 모델 ----------

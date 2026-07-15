@@ -9,6 +9,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // migrate 명령은 세션 풀러(5432) 또는 direct 연결을 우선 사용한다.
+    // DATABASE_URL fallback은 연결 없이 실행되는 prisma generate를 위한 것이다.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

@@ -1,5 +1,35 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+Supabase, GitHub, Vercel, and Kakao setup is documented in [the external services deployment guide](docs/deployment/external-services-setup.md).
+
+## Database setup (Supabase PostgreSQL)
+
+This project uses Prisma 7 with Supabase PostgreSQL. It needs two connection strings:
+
+- `DATABASE_URL`: Supavisor Transaction pooler URL on port `6543`, used by the Next.js runtime on Vercel.
+- `DIRECT_URL`: Supavisor Session pooler URL on port `5432` (or the direct URL), used by Prisma migrations.
+
+Create a Supabase project, open **Connect**, and copy the two pooler URLs. If you do not have a local `.env` yet, create one from the example:
+
+```bash
+cp .env.example .env
+```
+
+If `.env` already exists, do not overwrite it: replace its `DATABASE_URL`, add `DIRECT_URL`, and keep the existing Auth.js values. If the database password contains reserved URL characters, percent-encode it before putting it in the connection URL.
+
+Apply the committed migrations to a new Supabase database and generate Prisma Client:
+
+```bash
+npm run db:deploy
+npm run db:generate
+```
+
+The prototype migration history is intentionally squashed into one PostgreSQL baseline. Apply it to an empty Supabase database.
+
+For Vercel, add `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_KAKAO_ID`, and `AUTH_KAKAO_SECRET` to the project environment variables. Do not expose either database URL through a `NEXT_PUBLIC_` variable.
+
+References: [Supabase Prisma guide](https://supabase.com/docs/guides/database/prisma), [Prisma PostgreSQL connector](https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql).
+
 ## Getting Started
 
 First, run the development server:

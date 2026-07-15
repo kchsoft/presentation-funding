@@ -28,6 +28,8 @@ export default function PaperLive({
 }) {
   const [replaying, setReplaying] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  // 오프닝 진행 단계: -1 = 인트로("열어보기" 대기), 0..n-1 = 카드 한 장씩, n = 마무리 화면
+  const [step, setStep] = useState(-1);
   const editTokens = useEditTokens(fundingId);
   const hasOpened = usePaperOpened(fundingId);
   const { data, fetchNow } = useFundingUpdates(
@@ -48,20 +50,28 @@ export default function PaperLive({
     setReplaying(false);
   }, [fundingId]);
 
+  // 연출은 카드가 쌓인 순서(오래된 것부터)로 펼친다.
   const openingCards = useMemo(
     () => [...data.contributions].reverse(),
     [data.contributions],
   );
-  const revealStep = Math.min(0.45, 3 / Math.max(openingCards.length, 1));
 
+  // 인트로에서는 주인공이 "열어보기"를 누를 때까지 기다린다.
+  // 카드 단계에서는 읽을 시간을 주고 자동으로 넘어가되, 탭하면 바로 다음 카드로 간다.
   useEffect(() => {
-    if (!opening) return;
-    const totalSeconds = revealStep * Math.max(openingCards.length - 1, 0) + 1.8;
-    const timer = setTimeout(finishOpening, totalSeconds * 1000);
+    if (!opening || step < 0) return;
+    if (step >= openingCards.length) {
+      const timer = setTimeout(finishOpening, 1600);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setStep((s) => s + 1), 2800);
     return () => clearTimeout(timer);
-  }, [finishOpening, opening, openingCards.length, revealStep]);
+  }, [opening, step, openingCards.length, finishOpening]);
 
-  const replay = () => setReplaying(true);
+  const replay = () => {
+    setStep(-1);
+    setReplaying(true);
+  };
   const hiddenCards = data.hiddenContributions ?? [];
 
   return (
@@ -157,7 +167,7 @@ export default function PaperLive({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 overflow-y-auto bg-gradient-to-br from-rose-50 via-white to-amber-50 px-6 py-10 dark:from-neutral-950 dark:via-neutral-900 dark:to-amber-950"
+            className="fixed inset-0 z-50 flex flex-col bg-gradient-to-br from-rose-50 via-white to-amber-50 px-6 dark:from-neutral-950 dark:via-neutral-900 dark:to-amber-950"
           >
             <button
               type="button"
@@ -167,39 +177,75 @@ export default function PaperLive({
               건너뛰기
             </button>
 
-            <div className="mx-auto max-w-4xl">
-              <motion.header
-                initial={{ opacity: 0, y: 12 }}
+            {step < 0 ? (
+              /* 인트로 — 주인공이 직접 열어보는 순간을 만든다. */
+              <motion.div
+                key="intro"
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-8 pt-8 text-center"
+                className="m-auto w-full max-w-sm text-center"
               >
-                <p className="text-sm font-medium text-brand-500">{ownerName ?? "친구"}님에게</p>
-                <h2 className="mt-2 text-3xl font-bold">마음을 펼쳐볼게요 💌</h2>
-              </motion.header>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {openingCards.map((contribution, index) => (
+                <motion.p
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  className="text-6xl"
+                >
+                  💌
+                </motion.p>
+                <h2 className="mt-6 text-2xl font-bold leading-snug">
+                  {ownerName ?? "친구"}님을 위한
+                  <br />
+                  롤링페이퍼가 도착했어요
+                </h2>
+                <p className="mt-3 text-sm text-neutral-500">
+                  친구들이 남긴 마음 {openingCards.length}장이 담겨 있어요.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep(0)}
+                  className="mt-8 w-full rounded-xl bg-brand-500 py-3.5 text-sm font-semibold text-white transition hover:bg-brand-600"
+                >
+                  열어보기
+                </button>
+              </motion.div>
+            ) : step < openingCards.length ? (
+              /* 카드 한 장씩 — 읽을 시간을 주고, 탭하면 바로 다음으로. */
+              <div className="m-auto w-full max-w-sm">
+                <AnimatePresence mode="wait">
                   <motion.div
-                    key={contribution.id}
-                    initial={{ opacity: 0, y: 32, scale: 0.88, rotate: -2 }}
+                    key={openingCards[step].id}
+                    initial={{ opacity: 0, y: 48, scale: 0.9, rotate: -3 }}
                     animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
-                    transition={{
-                      delay: index * revealStep,
-                      duration: 0.55,
-                      type: "spring",
-                      stiffness: 130,
-                      damping: 16,
-                    }}
+                    exit={{ opacity: 0, y: -32, scale: 0.95, rotate: 2 }}
+                    transition={{ type: "spring", stiffness: 130, damping: 16 }}
+                    onClick={() => setStep((s) => s + 1)}
+                    className="cursor-pointer"
                   >
                     <PaperCard
                       fundingId={fundingId}
-                      contribution={contribution}
+                      contribution={openingCards[step]}
                       closed
                     />
                   </motion.div>
-                ))}
+                </AnimatePresence>
+                <p className="mt-6 text-center text-xs text-neutral-400">
+                  {step + 1} / {openingCards.length} · 탭하면 다음 카드
+                </p>
               </div>
-            </div>
+            ) : (
+              /* 마무리 — 잠시 여운을 주고 자동으로 전체 그리드로 넘어간다. */
+              <motion.div
+                key="outro"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="m-auto text-center"
+              >
+                <p className="text-5xl">🎉</p>
+                <h2 className="mt-4 text-xl font-bold">
+                  {openingCards.length}장의 마음이 모두 도착했어요
+                </h2>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

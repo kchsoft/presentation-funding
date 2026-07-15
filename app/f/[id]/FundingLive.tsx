@@ -1,19 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
-import { Clock, Users } from "lucide-react";
+import { Clock, EyeOff, MailOpen, Users } from "lucide-react";
 import type { FundingLiveData } from "@/app/lib/server/fundings";
 import { formatKrw } from "@/app/lib/format";
 import { useCountUp } from "@/app/lib/hooks/useCountUp";
+import { useFundingUpdates } from "@/app/lib/hooks/useFundingUpdates";
+import { useEditTokens } from "@/app/lib/paperTokens";
 import Confetti from "@/app/components/Confetti";
 import ContributeForm from "./ContributeForm";
+import PaperCard from "./PaperCard";
 import ShareButton from "./ShareButton";
 import DeleteButton from "./DeleteButton";
 import ThankYouEditor from "./ThankYouEditor";
 import ToastStack, { type ToastItem } from "./ToastStack";
-
-const POLL_INTERVAL_MS = 5000;
 
 export default function FundingLive({
   fundingId,
@@ -28,9 +30,9 @@ export default function FundingLive({
   ownerName: string | null;
   initial: FundingLiveData;
 }) {
-  const [data, setData] = useState(initial);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const editTokens = useEditTokens(fundingId);
 
   // 목표 달성 축하는 "실시간으로 넘어가는 순간"에만 터뜨린다 — 이미 달성된 펀딩을
   // 다시 방문했을 때 매번 재생되는 걸 막기 위해 초기값을 실제 초기 총액으로 잡는다.
@@ -75,59 +77,18 @@ export default function FundingLive({
       }
       prevTotalRef.current = next.total;
 
-      setData(next);
     },
     [pushToast],
   );
 
-  const fetchNow = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/fundings/${fundingId}/updates`, {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const next: FundingLiveData = await res.json();
-      applyUpdate(next);
-    } catch {
-      // 네트워크 실패는 조용히 무시 — 다음 폴링에서 재시도한다.
-    }
-  }, [fundingId, applyUpdate]);
-
-  useEffect(() => {
-    if (data.closed) return; // 마감된 펀딩은 더 이상 폴링할 필요가 없다.
-
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    function start() {
-      if (intervalId) return;
-      intervalId = setInterval(() => {
-        if (document.visibilityState === "visible") fetchNow();
-      }, POLL_INTERVAL_MS);
-    }
-    function stop() {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    }
-    function handleVisibility() {
-      if (document.visibilityState === "visible") {
-        fetchNow();
-        start();
-      } else {
-        stop();
-      }
-    }
-
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [fetchNow, data.closed]);
+  const { data, fetchNow } = useFundingUpdates(fundingId, initial, applyUpdate);
 
   const percentDisplay = useCountUp(data.percent);
+  const hiddenCount = data.hiddenContributions?.length ?? 0;
+  const ownerContributions = [
+    ...data.contributions,
+    ...(data.hiddenContributions ?? []),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <>
@@ -154,7 +115,7 @@ export default function FundingLive({
         <div className="flex justify-between text-xs text-neutral-400">
           <span className="flex items-center gap-1">
             <Users size={12} />
-            {data.contributions.length}명 참여
+            {data.participantCount}명 참여
           </span>
           <span className="flex items-center gap-1">
             <Clock size={12} />
@@ -194,6 +155,36 @@ export default function FundingLive({
             initialMessage={data.thankYouMessage}
             onSuccess={fetchNow}
           />
+          {ownerContributions.length > 0 && (
+            <div className="space-y-2 border-t border-amber-200 pt-3 dark:border-amber-900">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                참여 내역
+              </p>
+              <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">
+                {ownerContributions.map((contribution) => (
+                  <li
+                    key={contribution.id}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="truncate">{contribution.name}</span>
+                    {contribution.amount !== undefined && (
+                      <span className="shrink-0 font-semibold">
+                        {formatKrw(contribution.amount)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {hiddenCount > 0 && (
+            <Link
+              href={`/f/${fundingId}/paper#hidden-cards`}
+              className="flex items-center gap-1 text-xs font-medium text-amber-700 underline underline-offset-2 dark:text-amber-300"
+            >
+              <EyeOff size={12} /> 숨긴 카드 {hiddenCount}장 관리하기
+            </Link>
+          )}
         </section>
       )}
 
@@ -206,49 +197,59 @@ export default function FundingLive({
         !isOwner && (
           <section className="space-y-4 rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-neutral-900">
             <h2 className="font-semibold">마음 보태기</h2>
-            <ContributeForm fundingId={fundingId} onSuccess={fetchNow} />
+            <ContributeForm
+              fundingId={fundingId}
+              ownerName={ownerName}
+              onSuccess={fetchNow}
+            />
           </section>
         )
       )}
 
-      {/* 참여자 목록 */}
+      {/* 롤링페이퍼 미리보기 */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-neutral-500">
-          함께한 친구들{" "}
-          {data.contributions.length > 0 && `(${data.contributions.length})`}
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+              <MailOpen size={15} className="text-brand-500" /> 축하 롤링페이퍼
+            </h2>
+            <p className="mt-1 text-xs text-neutral-400">
+              {data.closed ? "친구들의 마음이 모두 도착했어요." : "친구들의 마음이 실시간으로 쌓이고 있어요."}
+            </p>
+          </div>
+          <Link
+            href={`/f/${fundingId}/paper`}
+            className="shrink-0 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600"
+          >
+            크게 보기
+          </Link>
+        </div>
         {data.contributions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-black/15 p-6 text-center text-sm text-neutral-400 dark:border-white/20">
-            아직 참여한 친구가 없어요. 첫 번째 주인공이 되어주세요!
+            아직 카드가 없어요. 첫 번째 마음을 남겨주세요!
           </p>
         ) : (
-          <ul className="space-y-2">
-            {data.contributions.map((c) => (
-              <li
-                key={c.id}
-                className="flex gap-3 rounded-xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-neutral-900"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
-                  {c.name[0]}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{c.name}</span>
-                    {isOwner && c.amount !== undefined && (
-                      <span className="text-sm font-semibold text-brand-500">
-                        {formatKrw(c.amount)}
-                      </span>
-                    )}
-                  </div>
-                  {c.message && (
-                    <p className="mt-1 text-sm leading-relaxed text-neutral-500">
-                      {c.message}
-                    </p>
-                  )}
-                </div>
-              </li>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {data.contributions.slice(0, 4).map((contribution) => (
+              <PaperCard
+                key={contribution.id}
+                fundingId={fundingId}
+                contribution={contribution}
+                editToken={editTokens[contribution.id]}
+                closed={data.closed}
+                isOwner={isOwner}
+                onChanged={fetchNow}
+              />
             ))}
-          </ul>
+          </div>
+        )}
+        {data.contributions.length > 4 && (
+          <Link
+            href={`/f/${fundingId}/paper`}
+            className="block text-center text-xs font-medium text-brand-500 hover:text-brand-600"
+          >
+            카드 {data.contributions.length - 4}장 더 보기 →
+          </Link>
         )}
       </section>
     </>

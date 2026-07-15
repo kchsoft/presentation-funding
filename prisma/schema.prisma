@@ -85,12 +85,14 @@ model Funding {
 }
 
 model Contribution {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   fundingId String
   name      String // 참여자 이름 (비로그인)
   amount    Int // 참여 금액 (KRW) — 주최자에게만 공개
-  message   String? // 축하 메시지 (공개)
-  createdAt DateTime @default(now())
+  message   String? // 축하 메시지 (공개) — 롤링페이퍼 카드로 표시
+  hiddenAt  DateTime? // 주인공의 카드 숨김 (null = 표시). 참여 기록·금액 집계는 유지
+  editToken String? // 작성 브라우저의 수정·삭제 인증 토큰 — 생성 응답에 1회만 노출
+  createdAt DateTime  @default(now())
 
   funding Funding @relation(fields: [fundingId], references: [id], onDelete: Cascade)
 

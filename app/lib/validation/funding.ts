@@ -50,6 +50,25 @@ export const contributeSchema = z.object({
     .transform((v) => v || null),
 });
 
+// 롤링페이퍼 카드(=참여 메시지) 수정 — 작성 브라우저의 editToken으로 인증한다.
+export const editMessageSchema = z.object({
+  fundingId: z.string().min(1),
+  contributionId: z.string().min(1),
+  editToken: z.string().min(1),
+  message: z
+    .string()
+    .trim()
+    .min(1, "메시지를 입력해주세요.")
+    .max(200, "메시지는 200자 이내로 적어주세요."),
+});
+
+// 카드 삭제 = 메시지만 비우기 (참여 기록은 이름 카드로 유지)
+export const deleteMessageSchema = z.object({
+  fundingId: z.string().min(1),
+  contributionId: z.string().min(1),
+  editToken: z.string().min(1),
+});
+
 export const thankYouMessageSchema = z.object({
   fundingId: z.string().min(1),
   thankYouMessage: z

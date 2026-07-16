@@ -26,7 +26,7 @@ npm run db:generate
 
 The prototype migration history is intentionally squashed into one PostgreSQL baseline. Apply it to an empty Supabase database.
 
-For Vercel, add `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_KAKAO_ID`, and `AUTH_KAKAO_SECRET` to the project environment variables. Do not expose either database URL through a `NEXT_PUBLIC_` variable.
+For Vercel, add `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_KAKAO_ID`, `AUTH_KAKAO_SECRET`, and `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY` to the project environment variables. The Kakao JavaScript key is a public browser identifier; do not expose either database URL or `AUTH_KAKAO_SECRET` through a `NEXT_PUBLIC_` variable.
 
 References: [Supabase Prisma guide](https://supabase.com/docs/guides/database/prisma), [Prisma PostgreSQL connector](https://www.prisma.io/docs/orm/core-concepts/supported-databases/postgresql).
 

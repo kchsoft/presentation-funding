@@ -4,7 +4,7 @@
 - 대상: 선물모아 프로토타입
 - 구성: Next.js 16 + Auth.js 5 + Prisma 7 + Supabase PostgreSQL + Vercel
 
-이 문서는 현재 로컬 프로젝트를 Supabase, GitHub, Vercel, 카카오 로그인과 연결해 실제 URL에서 끝까지 테스트하기 위한 체크리스트다.
+이 문서는 현재 로컬 프로젝트를 Supabase, GitHub, Vercel, 카카오 로그인·공유와 연결해 실제 URL에서 끝까지 테스트하기 위한 체크리스트다.
 
 ## 0. 전체 연결 구조
 
@@ -12,8 +12,8 @@
 |---|---|---|
 | Supabase | PostgreSQL 데이터베이스 | `DATABASE_URL`, `DIRECT_URL` |
 | GitHub | 원격 Git 저장소, Vercel 배포 소스 | 저장소 URL |
-| Vercel | Next.js 빌드·호스팅 | 환경변수 5개, Production Branch |
-| Kakao Developers | 카카오 OAuth 로그인 | REST API 키, Client Secret, Redirect URI |
+| Vercel | Next.js 빌드·호스팅 | 환경변수 6개, Production Branch |
+| Kakao Developers | 카카오 OAuth 로그인·카카오톡 공유 | REST API 키, Client Secret, JavaScript 키, Redirect URI, 웹 도메인 |
 
 권장 진행 순서는 다음과 같다.
 
@@ -44,10 +44,11 @@
 | `AUTH_SECRET` | 직접 생성 | 로컬, Vercel | 비밀 |
 | `AUTH_KAKAO_ID` | Kakao REST API key | 로컬, Vercel | 공개 식별자지만 env로 관리 |
 | `AUTH_KAKAO_SECRET` | Kakao Client Secret | 로컬, Vercel | 비밀 |
+| `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY` | Kakao JavaScript key | 로컬, Vercel | 브라우저에 공개되는 식별자 |
 
 실제 값은 Git에 커밋하지 않는다. `.env`는 이미 `.gitignore` 대상이며, 형식만 [.env.example](../../.env.example)에 보관한다.
 
-`NEXT_PUBLIC_` 접두사는 브라우저에 값을 노출하므로 위 변수에는 절대 붙이지 않는다.
+`NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`만 브라우저에서 Kakao JavaScript SDK를 초기화하기 위해 의도적으로 공개한다. 나머지 비밀 환경변수에는 `NEXT_PUBLIC_` 접두사를 절대 붙이지 않는다.
 
 ## 3. Supabase PostgreSQL 연결
 
@@ -222,7 +223,7 @@ https://PROJECT_NAME.vercel.app
 
 ## 6. Kakao Developers 설정
 
-이 프로젝트의 Auth.js Kakao Provider는 Kakao REST API OAuth를 사용한다. JavaScript SDK는 사용하지 않는다.
+이 프로젝트의 Auth.js Kakao Provider는 Kakao REST API OAuth를 사용한다. 별도의 카카오톡 공유 버튼은 Kakao JavaScript SDK를 사용한다.
 
 ### 6.1 앱 생성과 키 확인
 
@@ -285,9 +286,25 @@ Vercel Preview URL에서 카카오 로그인을 테스트하려면 각 Preview U
 
 테스트 앱에서 다른 사람에게 `KOE005`가 발생하면 해당 카카오 계정을 앱 멤버로 초대한다.
 
-### 6.5 JavaScript 도메인 설정 여부
+### 6.5 카카오톡 공유 설정
 
-이 앱은 Kakao JavaScript SDK가 아니라 서버의 REST API OAuth를 사용한다. 따라서 현재 구현에는 JavaScript 키의 SDK 도메인 등록이 필요하지 않다. 핵심은 REST API 키와 정확한 Redirect URI다.
+카카오 로그인과 같은 Kakao Developers 앱에서 **앱 → 플랫폼 키 → JavaScript 키**를 열고 키를 복사한다. 이 값은 다음 환경변수에 넣는다.
+
+```text
+NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY=<Kakao JavaScript key>
+```
+
+같은 JavaScript 키 설정의 **JavaScript SDK 도메인**에 실제 프론트엔드 출처(origin)를 등록한다. 경로는 넣지 않는다.
+
+```text
+http://localhost:3000
+https://PROJECT_NAME.vercel.app
+https://CUSTOM_DOMAIN
+```
+
+이어 **앱 → 제품 링크 관리 → 웹 도메인**에도 운영 도메인을 등록한다. 카카오톡 공유 카드의 `펀딩 참여하기` 버튼 URL은 여기에 등록된 도메인만 사용할 수 있다.
+
+이 기능은 카카오 로그인을 JavaScript 방식으로 바꾸는 것이 아니다. 로그인은 계속 REST API 키와 Client Secret을 사용하고, 공유 버튼만 공개 JavaScript 키를 사용한다.
 
 ## 7. Vercel 환경변수 완성 및 재배포
 
@@ -296,9 +313,10 @@ Kakao 설정이 끝나면 Vercel에 나머지 값을 추가한다.
 ```text
 AUTH_KAKAO_ID=<Kakao REST API key>
 AUTH_KAKAO_SECRET=<Kakao Client Secret>
+NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY=<Kakao JavaScript key>
 ```
 
-최종 환경변수 목록은 다음 5개다.
+최종 환경변수 목록은 다음 6개다.
 
 ```text
 DATABASE_URL
@@ -306,6 +324,7 @@ DIRECT_URL
 AUTH_SECRET
 AUTH_KAKAO_ID
 AUTH_KAKAO_SECRET
+NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY
 ```
 
 환경변수를 변경한 뒤에는 기존 배포에 자동 반영되지 않으므로 Vercel에서 Redeploy하거나 새 commit을 push한다.
@@ -337,6 +356,8 @@ AUTH_KAKAO_SECRET
 - [ ] 롤링페이퍼에는 금액이 표시되지 않는다.
 - [ ] 참여 메시지 수정·삭제가 같은 브라우저에서 동작한다.
 - [ ] 소유자의 카드 숨김·복구가 동작한다.
+- [ ] 소유자 화면의 `카카오톡으로 공유`에서 이미지·제목·참여 버튼이 포함된 카드가 열린다.
+- [ ] `다른 앱으로 공유`와 링크 복사 폴백이 동작한다.
 
 ## 9. 자주 발생하는 오류
 
@@ -372,6 +393,16 @@ Kakao Login 사용 설정이 OFF다. 상태를 ON으로 바꾼다.
 https://PROJECT_NAME.vercel.app/api/auth/callback/kakao
 ```
 
+### 카카오톡 공유 버튼이 보이지 않음
+
+`NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 로컬 또는 Vercel 빌드 환경에 없다. 값을 추가한 뒤 개발 서버를 재시작하거나 Vercel에서 Redeploy한다. `NEXT_PUBLIC_` 환경변수는 빌드 시 브라우저 번들에 포함된다.
+
+### 카카오톡 공유에서 도메인 오류가 발생함
+
+- **앱 → 플랫폼 키 → JavaScript 키 → JavaScript SDK 도메인**에 현재 사이트 origin이 등록됐는지 확인한다.
+- **앱 → 제품 링크 관리 → 웹 도메인**에 공유 카드가 연결할 도메인이 등록됐는지 확인한다.
+- 로컬과 운영 도메인은 각각 별도로 등록한다.
+
 ### Vercel에는 배포됐지만 오래된 코드가 보임
 
 Vercel Production Branch가 `main`으로 되어 있고 최신 코드는 `feat/og-preview`에 있을 가능성이 높다. Branch Tracking 설정을 확인한다.
@@ -386,3 +417,5 @@ Vercel Production Branch가 `main`으로 되어 있고 최신 코드는 `feat/og
 - [Kakao Login: 설정하기](https://developers.kakao.com/docs/ko/kakaologin/prerequisite)
 - [Kakao Login: REST API](https://developers.kakao.com/docs/ko/kakaologin/rest-api)
 - [Kakao Login: 오류 코드](https://developers.kakao.com/docs/ko/kakaologin/trouble-shooting)
+- [Kakao JavaScript SDK: 시작하기](https://developers.kakao.com/docs/ko/javascript/getting-started)
+- [Kakao Talk Share: JavaScript](https://developers.kakao.com/docs/ko/kakaotalk-share/js-link)

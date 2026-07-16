@@ -86,6 +86,7 @@ export default async function FundingPage({ params }: Props) {
       <FundingLive
         fundingId={funding.id}
         title={funding.title}
+        imageUrl={funding.imageUrl}
         isOwner={isOwner}
         ownerName={funding.owner.name}
         initial={initial}

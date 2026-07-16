@@ -20,12 +20,14 @@ import ToastStack, { type ToastItem } from "./ToastStack";
 export default function FundingLive({
   fundingId,
   title,
+  imageUrl,
   isOwner,
   ownerName,
   initial,
 }: {
   fundingId: string;
   title: string;
+  imageUrl: string | null;
   isOwner: boolean;
   ownerName: string | null;
   initial: FundingLiveData;
@@ -149,7 +151,12 @@ export default function FundingLive({
             지금까지 모인 금액:{" "}
             <span className="font-bold">{formatKrw(data.total)}</span>
           </p>
-          <ShareButton title={title} />
+          <ShareButton
+            title={title}
+            ownerName={ownerName}
+            imageUrl={imageUrl}
+            percent={data.percent}
+          />
           <ThankYouEditor
             fundingId={fundingId}
             initialMessage={data.thankYouMessage}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchOg } from "@/app/lib/fetchOg";
+import { blockedShopName, withTopicParticle } from "@/app/lib/shopHosts";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { error: "http 또는 https URL만 지원합니다." },
       { status: 400 },
+    );
+  }
+
+  // 자동 조회를 막아둔 쇼핑몰에는 요청 자체를 보내지 않는다.
+  // 클라이언트도 같은 검사를 하지만, /debug/og 등 다른 호출자도 있어 서버에서 한 번 더 막는다.
+  const blocked = blockedShopName(target);
+  if (blocked) {
+    return NextResponse.json(
+      {
+        error: `${withTopicParticle(blocked)} 상품 정보를 자동으로 가져올 수 없어요.`,
+        blocked: true,
+      },
+      { status: 422 },
     );
   }
 

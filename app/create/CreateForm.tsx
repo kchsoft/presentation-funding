@@ -6,6 +6,7 @@ import { createFundingAction, type ActionState } from "@/app/actions/funding";
 import { createSchema } from "@/app/lib/validation/funding";
 import { formatKrw } from "@/app/lib/format";
 import type { OgResult } from "@/app/lib/types";
+import { blockedShopName, withTopicParticle } from "@/app/lib/shopHosts";
 
 const SPLIT_COUNTS = [2, 3, 5, 10];
 const STEP_LABELS = ["링크", "정보", "확인"];
@@ -127,6 +128,11 @@ export default function CreateForm() {
     const value = productUrl.trim();
     if (!isFetchableUrl(value) || value === fetchedUrlRef.current) return;
 
+    // 자동 조회를 막아둔 쇼핑몰은 요청 자체를 보내지 않는다.
+    // 어차피 실패할 요청에 몇 초씩 기다리게 할 이유가 없다.
+    // 안내 문구는 렌더 중 blockedShop으로 파생시킨다(여기서 setState하지 않는다).
+    if (blockedShopName(value)) return;
+
     const timer = setTimeout(() => void loadOg(value), OG_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [productUrl, loadOg]);
@@ -161,7 +167,11 @@ export default function CreateForm() {
     setStep((s) => Math.max(1, s - 1));
   }
 
-  const image = og?.images[0]?.url ?? null;
+  // 자동 조회가 막힌 쇼핑몰인지는 상태가 아니라 입력값에서 파생시킨다.
+  // 링크를 바꾸면 즉시 반영되고, 이전 링크의 조회 결과가 남아 새 상품에 섞이지 않는다.
+  const blockedShop = blockedShopName(productUrl.trim());
+  const effectiveOg = blockedShop ? null : og;
+  const image = effectiveOg?.images[0]?.url ?? null;
   const goalNumber = Number(goalAmount);
   const hasValidGoal = Number.isFinite(goalNumber) && goalNumber > 0;
 
@@ -218,20 +228,32 @@ export default function CreateForm() {
         {ogLoading ? (
           <p className="text-xs text-neutral-400">상품 정보를 불러오는 중…</p>
         ) : (
-          !og &&
-          !ogError && (
+          !effectiveOg &&
+          !ogError &&
+          !blockedShop && (
             <p className="text-xs text-neutral-400">
               링크를 붙여넣으면 상품 정보를 자동으로 가져와요.
             </p>
           )
         )}
-        {ogError && (
-          <div className="flex items-center gap-2 text-sm text-red-600">
-            <span>{ogError}</span>
+
+        {/* 조회가 안 되는 건 사용자 잘못이 아니다. 경고색 대신 담담한 안내로 보여주고,
+            어느 쪽이든 "다음"으로 그냥 진행할 수 있다는 걸 분명히 한다. */}
+        {blockedShop && (
+          <p className="rounded-lg bg-neutral-100 p-3 text-xs leading-relaxed text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+            {withTopicParticle(blockedShop)} 상품 정보를 자동으로 가져올 수
+            없어요. 다음 단계에서 직접 입력해주세요.
+          </p>
+        )}
+        {ogError && !blockedShop && (
+          <div className="flex items-start gap-2 rounded-lg bg-neutral-100 p-3 dark:bg-neutral-800">
+            <p className="flex-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+              {ogError} 직접 입력해도 괜찮아요.
+            </p>
             <button
               type="button"
               onClick={() => void loadOg(productUrl)}
-              className="shrink-0 rounded-lg border border-black/15 px-3 py-1 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="shrink-0 rounded-lg border border-black/15 px-3 py-1 text-xs font-medium text-neutral-600 transition hover:bg-white dark:border-white/20 dark:text-neutral-300 dark:hover:bg-neutral-700"
             >
               다시 시도
             </button>
@@ -242,7 +264,7 @@ export default function CreateForm() {
           <div className="h-32 w-full animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
         )}
 
-        {og && !ogLoading && (
+        {effectiveOg && !ogLoading && (
           <div className="flex items-center gap-4 rounded-xl border border-black/10 bg-white p-4 dark:border-white/15 dark:bg-neutral-900">
             {image ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -258,9 +280,9 @@ export default function CreateForm() {
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">
-                {og.title || "(제목 없음)"}
+                {effectiveOg.title || "(제목 없음)"}
               </p>
-              <p className="mt-0.5 text-xs text-neutral-400">{og.siteName}</p>
+              <p className="mt-0.5 text-xs text-neutral-400">{effectiveOg.siteName}</p>
             </div>
           </div>
         )}
@@ -268,7 +290,7 @@ export default function CreateForm() {
 
       {/* OG에서 가져온 값은 hidden으로 함께 제출 */}
       <input type="hidden" name="imageUrl" value={image ?? ""} />
-      <input type="hidden" name="siteName" value={og?.siteName ?? ""} />
+      <input type="hidden" name="siteName" value={effectiveOg?.siteName ?? ""} />
 
       {/* 2단계: 펀딩 정보 */}
       <section className={step === 2 ? "space-y-5" : "hidden space-y-5"}>

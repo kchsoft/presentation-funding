@@ -1,12 +1,12 @@
 import ogs from "open-graph-scraper";
 import type { OgImage, OgResult } from "./types";
 
-// 일부 커머스 사이트(쿠팡/스마트스토어 등)는 봇 차단이 있어
-// 브라우저처럼 보이는 User-Agent / Accept 헤더를 함께 보낸다.
-const BROWSER_HEADERS = {
-  "user-agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+// 신원을 있는 그대로 밝힌다. Chrome을 사칭하면 쿠팡처럼 봇을 막아둔 곳도 뚫리지만,
+// 그건 robots.txt에서 `User-agent: * → Disallow: /` 로 거절한 곳에 신원을 속이고
+// 들어가는 것이다. 사칭하지 않아도 애플·나이키·29CM 등 허용하는 곳은 정상 응답한다.
+// 막는 곳은 shopHosts.ts에서 애초에 요청하지 않는다.
+const BOT_HEADERS = {
+  "user-agent": "SeonmulMoaBot/1.0 (+https://seonmulmoa.app/bot; link preview)",
   "accept":
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -127,7 +127,7 @@ export async function fetchOg(target: string): Promise<OgResult> {
   try {
     const res = await ogs({
       url: target,
-      fetchOptions: { headers: BROWSER_HEADERS },
+      fetchOptions: { headers: BOT_HEADERS },
       timeout: 10000,
     });
     if (res.error) throw new Error("blocked");

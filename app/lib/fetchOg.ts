@@ -54,6 +54,70 @@ function normalizeImages(raw: unknown, base: string): OgImage[] {
   return out;
 }
 
+/**
+ * "1,290,000원" / "369000.00" / 369000 처럼 제각각인 가격 표기를
+ * 원 단위 정수 문자열로 정규화한다. 해석할 수 없거나 0 이하면 null.
+ */
+function normalizePrice(v: unknown): string | null {
+  if (typeof v !== "string" && typeof v !== "number") return null;
+  // 통화 기호·쉼표·공백은 버리고 숫자와 소수점만 남긴다.
+  const cleaned = String(v).replace(/[^\d.]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return String(Math.round(n));
+}
+
+/**
+ * JSON-LD(schema.org)에서 상품 가격을 찾는다.
+ *
+ * 실제 쇼핑몰은 og:price:amount 같은 페이스북 커머스 메타를 거의 쓰지 않고
+ * Product/Offer JSON-LD로만 가격을 노출한다. OG 메타가 없을 때의 폴백이다.
+ *
+ * @graph 중첩, offers 배열/단일 객체, AggregateOffer(lowPrice),
+ * 그리고 ProductGroup + hasVariant(나이키 등 옵션 상품)를 모두 처리한다.
+ */
+export function extractJsonLdPrice(jsonLD: unknown): {
+  price: string | null;
+  currency: string | null;
+} {
+  const empty = { price: null, currency: null };
+
+  // Product를 찾을 때까지 넓게 훑는다. 깊이 제한으로 순환/거대 문서를 방어한다.
+  function walk(node: unknown, depth: number): Record<string, unknown> | null {
+    if (depth > 6 || !node || typeof node !== "object") return null;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = walk(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    const o = node as Record<string, unknown>;
+    const types = Array.isArray(o["@type"]) ? o["@type"] : [o["@type"]];
+    const isProduct = types.some(
+      (t) => t === "Product" || t === "ProductGroup",
+    );
+    if (isProduct && o.offers) return o;
+    // ProductGroup은 자기 offers 없이 hasVariant의 각 Product에만 가격을 둔다.
+    return walk(o["@graph"], depth + 1) ?? walk(o.hasVariant, depth + 1);
+  }
+
+  const product = walk(jsonLD, 0);
+  if (!product) return empty;
+
+  const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
+  for (const offer of offers) {
+    if (!offer || typeof offer !== "object") continue;
+    const o = offer as Record<string, unknown>;
+    // AggregateOffer는 price 대신 lowPrice를 쓴다 — 가장 싼 값을 기준으로 잡는다.
+    const price = normalizePrice(o.price) ?? normalizePrice(o.lowPrice);
+    if (price) return { price, currency: str(o.priceCurrency) };
+  }
+
+  return empty;
+}
+
 export async function fetchOg(target: string): Promise<OgResult> {
   const host = new URL(target).host;
 
@@ -86,6 +150,7 @@ export async function fetchOg(target: string): Promise<OgResult> {
     "";
 
   const video = normalizeImages(r.ogVideo, target)[0]?.url ?? null;
+  const jsonLdPrice = extractJsonLdPrice(r.jsonLD);
 
   return {
     title,
@@ -104,8 +169,15 @@ export async function fetchOg(target: string): Promise<OgResult> {
       str(r.articlePublishedTime) ??
       str(r.articleModifiedTime),
 
-    price: str(r.ogPriceAmount) ?? str(r.productPriceAmount),
-    currency: str(r.ogPriceCurrency) ?? str(r.productPriceCurrency),
+    // OG 커머스 메타 → JSON-LD 순. 실제 쇼핑몰은 대부분 후자에만 가격이 있다.
+    price:
+      normalizePrice(r.ogPriceAmount) ??
+      normalizePrice(r.productPriceAmount) ??
+      jsonLdPrice.price,
+    currency:
+      str(r.ogPriceCurrency) ??
+      str(r.productPriceCurrency) ??
+      jsonLdPrice.currency,
     availability: str(r.ogAvailability) ?? str(r.productAvailability),
 
     author: str(r.articleAuthor) ?? str(r.author),

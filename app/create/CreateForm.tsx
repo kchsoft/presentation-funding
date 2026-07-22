@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { Gift } from "lucide-react";
 import { createFundingAction, type ActionState } from "@/app/actions/funding";
 import { createSchema } from "@/app/lib/validation/funding";
@@ -9,6 +9,19 @@ import type { OgResult } from "@/app/lib/types";
 
 const SPLIT_COUNTS = [2, 3, 5, 10];
 const STEP_LABELS = ["링크", "정보", "확인"];
+
+/** 붙여넣기/타이핑이 멈춘 뒤 이만큼 기다렸다가 OG를 가져온다. */
+const OG_DEBOUNCE_MS = 500;
+
+/** 자동 조회를 시도할 만한 URL인지. 스킴이 없으면 아직 입력 중으로 본다. */
+function isFetchableUrl(value: string) {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 /** 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD). date input의 min 값으로 쓴다. */
 function todayString() {
@@ -36,14 +49,36 @@ export default function CreateForm() {
     null,
   );
 
-  async function loadOg() {
-    const value = productUrl.trim();
+  // 자동 조회 상태. 렌더와 무관한 값이라 ref로만 들고 있는다.
+  //  - fetchedUrl: 이미 조회한 URL (같은 URL을 반복 조회하지 않게)
+  //  - abort: 진행 중인 요청 (URL이 또 바뀌면 취소해서 늦게 온 응답이 덮어쓰지 못하게)
+  //  - autoTitle/autoGoal: 마지막으로 "자동으로" 채워 넣은 값.
+  //    사용자가 직접 고친 값은 다음 조회에서 덮어쓰지 않기 위한 기준점이다.
+  const fetchedUrlRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const autoRef = useRef({ title: "", goal: "" });
+
+  // 프리필 판단에 쓸 최신 입력값. loadOg를 stable하게 유지하려고 ref로 미러링한다.
+  const inputRef = useRef({ title, goalAmount });
+  useEffect(() => {
+    inputRef.current = { title, goalAmount };
+  }, [title, goalAmount]);
+
+  const loadOg = useCallback(async (target: string) => {
+    const value = target.trim();
     if (!value) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    fetchedUrlRef.current = value;
 
     setOgLoading(true);
     setOgError(null);
     try {
-      const res = await fetch(`/api/og?url=${encodeURIComponent(value)}`);
+      const res = await fetch(`/api/og?url=${encodeURIComponent(value)}`, {
+        signal: controller.signal,
+      });
       const json = await res.json();
       if (!res.ok) {
         setOgError(json.error ?? "상품 정보를 가져오지 못했어요.");
@@ -52,17 +87,49 @@ export default function CreateForm() {
       }
       const data = json as OgResult;
       setOg(data);
-      if (data.title) setTitle(data.title);
+
+      const auto = autoRef.current;
+      const input = inputRef.current;
+
+      // 비어 있거나 이전 자동 프리필 값 그대로일 때만 덮어쓴다.
+      // 사용자가 손댄 값은 링크를 바꿔도 유지된다.
+      if (data.title && (!input.title || input.title === auto.title)) {
+        setTitle(data.title);
+        auto.title = data.title;
+        input.title = data.title;
+      }
       // OG에 가격이 있으면 목표 금액으로 프리필 (원화 정수만)
       const price = Number(data.price);
-      if (Number.isInteger(price) && price > 0) setGoalAmount(String(price));
-    } catch {
+      if (
+        Number.isInteger(price) &&
+        price > 0 &&
+        (!input.goalAmount || input.goalAmount === auto.goal)
+      ) {
+        setGoalAmount(String(price));
+        auto.goal = String(price);
+        input.goalAmount = String(price);
+      }
+    } catch (e) {
+      // 취소된 요청은 사용자가 링크를 더 입력한 것뿐이므로 조용히 무시한다.
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setOgError("네트워크 오류가 발생했어요.");
       setOg(null);
     } finally {
-      setOgLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setOgLoading(false);
+      }
     }
-  }
+  }, []);
+
+  // 링크를 붙여넣거나 입력이 멈추면 자동으로 상품 정보를 가져온다.
+  useEffect(() => {
+    const value = productUrl.trim();
+    if (!isFetchableUrl(value) || value === fetchedUrlRef.current) return;
+
+    const timer = setTimeout(() => void loadOg(value), OG_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [productUrl, loadOg]);
 
   function goNext() {
     if (step === 1) {
@@ -137,28 +204,39 @@ export default function CreateForm() {
         <label htmlFor="productUrl" className="text-sm font-semibold">
           상품 링크
         </label>
-        <div className="flex gap-2">
-          <input
-            id="productUrl"
-            name="productUrl"
-            type="text"
-            inputMode="url"
-            required
-            value={productUrl}
-            onChange={(e) => setProductUrl(e.target.value)}
-            placeholder="https://... 받고 싶은 상품 링크를 붙여넣으세요"
-            className="flex-1 rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-white/20 dark:bg-neutral-900"
-          />
-          <button
-            type="button"
-            onClick={loadOg}
-            disabled={ogLoading || !productUrl.trim()}
-            className="rounded-lg border border-black/15 px-4 py-2.5 text-sm font-medium transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/20 dark:hover:bg-neutral-800"
-          >
-            {ogLoading ? "불러오는 중…" : "정보 가져오기"}
-          </button>
-        </div>
-        {ogError && <p className="text-sm text-red-600">{ogError}</p>}
+        <input
+          id="productUrl"
+          name="productUrl"
+          type="text"
+          inputMode="url"
+          required
+          value={productUrl}
+          onChange={(e) => setProductUrl(e.target.value)}
+          placeholder="https://... 받고 싶은 상품 링크를 붙여넣으세요"
+          className="w-full rounded-lg border border-black/15 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-white/20 dark:bg-neutral-900"
+        />
+        {ogLoading ? (
+          <p className="text-xs text-neutral-400">상품 정보를 불러오는 중…</p>
+        ) : (
+          !og &&
+          !ogError && (
+            <p className="text-xs text-neutral-400">
+              링크를 붙여넣으면 상품 정보를 자동으로 가져와요.
+            </p>
+          )
+        )}
+        {ogError && (
+          <div className="flex items-center gap-2 text-sm text-red-600">
+            <span>{ogError}</span>
+            <button
+              type="button"
+              onClick={() => void loadOg(productUrl)}
+              className="shrink-0 rounded-lg border border-black/15 px-3 py-1 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
 
         {ogLoading && (
           <div className="h-32 w-full animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
@@ -350,11 +428,13 @@ export default function CreateForm() {
             onClick={goNext}
             tabIndex={step === 3 ? -1 : 0}
             aria-hidden={step === 3}
-            className={`w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 ${
+            // 1단계에서 조회 중에 넘어가면 프리필이 반영되기 전 화면을 보게 된다.
+            disabled={step === 1 && ogLoading}
+            className={`w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 ${
               step === 3 ? "invisible" : ""
             }`}
           >
-            다음
+            {step === 1 && ogLoading ? "불러오는 중…" : "다음"}
           </button>
           <button
             type="submit"
